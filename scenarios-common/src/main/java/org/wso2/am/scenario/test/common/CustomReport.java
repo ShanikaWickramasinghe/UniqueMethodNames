@@ -11,13 +11,17 @@ import org.testng.ITestContext;
 import org.testng.ITestNGMethod;
 import org.testng.ITestResult;
 import org.testng.Reporter;
-import org.testng.IReporter;
-import org.testng.ISuite;
 import org.testng.TestListenerAdapter;
 import org.testng.internal.Utils;
+
+//newly added
+import org.testng.IReporter;
+import org.testng.ISuite;
 import org.testng.xml.XmlSuite;
 import org.testng.reporters.HtmlHelper;
 
+
+//newly added
 public class CustomReport  extends TestListenerAdapter implements IReporter {
     @Override
     public void generateReport(List<XmlSuite> xmlSuites, List<ISuite> suites,
@@ -65,6 +69,7 @@ public class CustomReport  extends TestListenerAdapter implements IReporter {
                 sb.append("<br>").append("Test class: " + testClass);
                 String testName = tr.getTestName();
                 if (testName != null) {
+                    //newly changed
 //                    sb.append(" (").append(testName).append(")");
                 }
             }
@@ -93,6 +98,7 @@ public class CustomReport  extends TestListenerAdapter implements IReporter {
                 fullStackTrace = "Output-" + tr.hashCode();
                 sb.append("\n<a href=\"#").append(fullStackTrace).append("\"").append(" onClick='toggleBox(\"").append(fullStackTrace).append("\", this, \"Show output\", \"Hide output\");'>").append("Show output</a>\n").append("\n<a href=\"#").append(fullStackTrace).append("\"").append(" onClick=\"toggleAllBoxes();\">Show all outputs</a>\n");
                 sb.append("<div class='log' id=\"").append(fullStackTrace).append("\">\n");
+                //newly changed
                 i$ = output.iterator();
 
                 while(i$.hasNext()) {
@@ -181,7 +187,7 @@ public class CustomReport  extends TestListenerAdapter implements IReporter {
         sb.append("</body>\n</html>");
         Utils.writeFile(outputDirectory, getOutputFile(testContext), sb.toString());
     }
-
+    //newly changed
     private static void ppp(String s) {
         System.out.println("[CustomReport] " + s);
     }

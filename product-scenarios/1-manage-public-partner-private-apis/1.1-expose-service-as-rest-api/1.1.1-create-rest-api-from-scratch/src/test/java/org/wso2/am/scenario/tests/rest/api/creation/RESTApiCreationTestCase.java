@@ -148,12 +148,12 @@ public class RESTApiCreationTestCase extends ScenarioTestBase implements ITest{
         verifyResponse(serviceResponse);
         verifyAPIName(apiName, username);
     }
-
+    //newly added
     @BeforeMethod(alwaysRun = true)
     public void changeTestCaseName(Method method) {
         testInstanceName = method.getAnnotation(Test.class).description() + "_" + method.getName() +"_"+ adminUsername;
     }
-
+    //newly added
     public String getTestName() {
         return testInstanceName;
     }
