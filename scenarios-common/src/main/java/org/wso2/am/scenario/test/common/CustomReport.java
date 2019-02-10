@@ -11,22 +11,504 @@ import org.testng.ITestContext;
 import org.testng.ITestNGMethod;
 import org.testng.ITestResult;
 import org.testng.Reporter;
-import org.testng.TestListenerAdapter;
-import org.testng.internal.Utils;
-
-//newly added
 import org.testng.IReporter;
 import org.testng.ISuite;
+import org.testng.TestListenerAdapter;
+import org.testng.internal.Utils;
 import org.testng.xml.XmlSuite;
 import org.testng.reporters.HtmlHelper;
+//new
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import org.testng.IReporter;
+import org.testng.IResultMap;
+import org.testng.ISuite;
+import org.testng.ISuiteResult;
+import org.testng.ITestClass;
+import org.testng.ITestContext;
+import org.testng.ITestNGMethod;
+import org.testng.ITestResult;
+import org.testng.Reporter;
+import org.testng.internal.Utils;
+import org.testng.log4testng.Logger;
+import org.testng.reporters.util.StackTraceTools;
+import org.testng.xml.XmlSuite;
 
-
-//newly added
 public class CustomReport  extends TestListenerAdapter implements IReporter {
+    private static final Logger L = Logger.getLogger(CustomReport.class);
+    private PrintWriter m_out;
+    private int m_row;
+    private int m_methodIndex;
+    private int m_rowTotal;
+
     @Override
     public void generateReport(List<XmlSuite> xmlSuites, List<ISuite> suites,
                                String outputDirectory) {
+        try {
+            this.m_out = this.createWriter(outputDirectory);
+        } catch (IOException var5) {
+            L.error("output file", var5);
+            return;
+        }
 
+        this.startHtml(this.m_out);
+        this.generateSuiteSummaryReport(suites);
+        this.generateMethodSummaryReport(suites);
+        this.generateMethodDetailReport(suites);
+        this.endHtml(this.m_out);
+        this.m_out.flush();
+        this.m_out.close();
+
+    }
+
+    protected PrintWriter createWriter(String outdir) throws IOException {
+        (new File(outdir)).mkdirs();
+        return new PrintWriter(new BufferedWriter(new FileWriter(new File(outdir, "emailable-report.html"))));
+    }
+
+    protected void generateMethodSummaryReport(List<ISuite> suites) {
+        this.m_methodIndex = 0;
+        this.m_out.println("<a id=\"summary\"></a>");
+        this.startResultSummaryTable("passed");
+        Iterator i$ = suites.iterator();
+
+        while(i$.hasNext()) {
+            ISuite suite = (ISuite)i$.next();
+            if (suites.size() > 1) {
+                this.titleRow(suite.getName(), 4);
+            }
+
+            Map<String, ISuiteResult> r = suite.getResults();
+            i$ = r.values().iterator();
+
+            while(i$.hasNext()) {
+                ISuiteResult r2 = (ISuiteResult)i$.next();
+                ITestContext testContext = r2.getTestContext();
+                String testName = testContext.getName();
+                this.resultSummary(testContext.getFailedConfigurations(), testName, "failed", " (configuration methods)");
+                this.resultSummary(testContext.getFailedTests(), testName, "failed", "");
+                this.resultSummary(testContext.getSkippedConfigurations(), testName, "skipped", " (configuration methods)");
+                this.resultSummary(testContext.getSkippedTests(), testName, "skipped", "");
+                this.resultSummary(testContext.getPassedTests(), testName, "passed", "");
+            }
+        }
+
+        this.m_out.println("</table>");
+    }
+
+    protected void generateMethodDetailReport(List<ISuite> suites) {
+        this.m_methodIndex = 0;
+        Iterator i$ = suites.iterator();
+
+        while(i$.hasNext()) {
+            ISuite suite = (ISuite)i$.next();
+            Map<String, ISuiteResult> r = suite.getResults();
+            i$ = r.values().iterator();
+
+            while(i$.hasNext()) {
+                ISuiteResult r2 = (ISuiteResult)i$.next();
+                ITestContext testContext = r2.getTestContext();
+                if (r.values().size() > 0) {
+                    this.m_out.println("<h1>" + testContext.getName() + "</h1>");
+                }
+
+                this.resultDetail(testContext.getFailedConfigurations(), "failed");
+                this.resultDetail(testContext.getFailedTests(), "failed");
+                this.resultDetail(testContext.getSkippedConfigurations(), "skipped");
+                this.resultDetail(testContext.getSkippedTests(), "skipped");
+                this.resultDetail(testContext.getPassedTests(), "passed");
+            }
+        }
+
+    }
+
+    private void resultSummary(IResultMap tests, String testname, String style, String details) {
+        if (tests.getAllResults().size() > 0) {
+            StringBuffer buff = new StringBuffer();
+            String lastClassName = "";
+            int mq = 0;
+            int cq = 0;
+            Iterator i$ = this.getMethodSet(tests).iterator();
+
+            while(i$.hasNext()) {
+                ITestNGMethod method = (ITestNGMethod)i$.next();
+                ++this.m_row;
+                ++this.m_methodIndex;
+                ITestClass testClass = method.getTestClass();
+                String className = testClass.getName();
+                if (mq == 0) {
+                    this.titleRow(testname + " &#8212; " + style + details, 4);
+                }
+
+                if (!className.equalsIgnoreCase(lastClassName)) {
+                    if (mq > 0) {
+                        ++cq;
+                        this.m_out.println("<tr class=\"" + style + (cq % 2 == 0 ? "even" : "odd") + "\">" + "<td rowspan=\"" + mq + "\">" + lastClassName + buff);
+                    }
+
+                    mq = 0;
+                    buff.setLength(0);
+                    lastClassName = className;
+                }
+
+                Set<ITestResult> resultSet = tests.getResults(method);
+                long end = -9223372036854775808L;
+                long start = 9223372036854775807L;
+                Iterator i$2 = tests.getResults(method).iterator();
+
+                while(i$2.hasNext()) {
+                    ITestResult testResult = (ITestResult)i$2.next();
+                    if (testResult.getEndMillis() > end) {
+                        end = testResult.getEndMillis();
+                    }
+
+                    if (testResult.getStartMillis() < start) {
+                        start = testResult.getStartMillis();
+                    }
+                }
+
+                ++mq;
+                if (mq > 1) {
+                    buff.append("<tr class=\"" + style + (cq % 2 == 0 ? "odd" : "even") + "\">");
+                }
+
+                String description = method.getDescription();
+                String testInstanceName = ((ITestResult[])resultSet.toArray(new ITestResult[0]))[0].getTestName();
+                buff.append("<td><a href=\"#m" + this.m_methodIndex + "\">" + this.qualifiedName(method) + " " + (description != null && description.length() > 0 ? "(\"" + description + "\")" : "") + "</a>" + "</td>" + "<td class=\"numi\">" + resultSet.size() + "</td><td class=\"numi\">" + (end - start) + "</td></tr>");
+            }
+
+            if (mq > 0) {
+                ++cq;
+                this.m_out.println("<tr class=\"" + style + (cq % 2 == 0 ? "even" : "odd") + "\">" + "<td rowspan=\"" + mq + "\">" + lastClassName + buff);
+            }
+        }
+
+    }
+
+    private void startResultSummaryTable(String style) {
+        this.tableStart(style);
+        this.m_out.println("<tr><th>Class</th><th>Method</th><th># of<br/>Scenarios</th><th>Time<br/>(Msecs)</th></tr>");
+        this.m_row = 0;
+    }
+
+    private String qualifiedName(ITestNGMethod method) {
+        StringBuilder addon = new StringBuilder();
+        String[] groups = method.getGroups();
+        int length = groups.length;
+        if (length > 0 && !"basic".equalsIgnoreCase(groups[0])) {
+            addon.append("(");
+
+            for(int i = 0; i < length; ++i) {
+                if (i > 0) {
+                    addon.append(", ");
+                }
+
+                addon.append(groups[i]);
+            }
+
+            addon.append(")");
+        }
+
+        return "<b>" + method.getMethodName() + "</b> " + addon;
+    }
+
+    private void resultDetail(IResultMap tests, String style) {
+        Iterator i$ = tests.getAllResults().iterator();
+
+        while(i$.hasNext()) {
+            ITestResult result = (ITestResult)i$.next();
+            int row = 0;
+            ITestNGMethod method = result.getMethod();
+            int var9 = row + 1;
+            ++this.m_methodIndex;
+            String cname = method.getTestClass().getName();
+            this.m_out.println("<a id=\"m" + this.m_methodIndex + "\"></a><h2>" + cname + ":" + method.getMethodName() + "</h2>");
+            Set<ITestResult> resultSet = tests.getResults(method);
+            this.generateForResult(result, method, resultSet.size());
+            this.m_out.println("<p class=\"totop\"><a href=\"#summary\">back to summary</a></p>");
+        }
+
+    }
+
+    private void generateForResult(ITestResult ans, ITestNGMethod method, int resultSetSize) {
+        int rq = 0;
+        rq = rq + 1;
+        Object[] parameters = ans.getParameters();
+        boolean hasParameters = parameters != null && parameters.length > 0;
+        if (hasParameters) {
+            if (rq == 1) {
+                this.tableStart("param");
+                this.m_out.print("<tr>");
+
+                for(int x = 1; x <= parameters.length; ++x) {
+                    this.m_out.print("<th style=\"padding-left:1em;padding-right:1em\">Parameter #" + x + "</th>");
+                }
+
+                this.m_out.println("</tr>");
+            }
+
+            this.m_out.print("<tr" + (rq % 2 == 0 ? " class=\"stripe\"" : "") + ">");
+            Object[] arr$ = parameters;
+            int len$ = parameters.length;
+
+            for(int i$ = 0; i$ < len$; ++i$) {
+                Object p = arr$[i$];
+                this.m_out.println("<td style=\"padding-left:.5em;padding-right:2em\">" + (p != null ? Utils.escapeHtml(p.toString()) : "null") + "</td>");
+            }
+
+            this.m_out.println("</tr>");
+        }
+
+        List<String> msgs = Reporter.getOutput(ans);
+        boolean hasReporterOutput = msgs.size() > 0;
+        Throwable exception = ans.getThrowable();
+        boolean hasThrowable = exception != null;
+        if (hasReporterOutput || hasThrowable) {
+            String indent = " style=\"padding-left:3em\"";
+            if (hasParameters) {
+                this.m_out.println("<tr" + (rq % 2 == 0 ? " class=\"stripe\"" : "") + "><td" + indent + " colspan=\"" + parameters.length + "\">");
+            } else {
+                this.m_out.println("<div" + indent + ">");
+            }
+
+            if (hasReporterOutput) {
+                if (hasThrowable) {
+                    this.m_out.println("<h3>Test Messages</h3>");
+                }
+
+                Iterator i$ = msgs.iterator();
+
+                while(i$.hasNext()) {
+                    String line = (String)i$.next();
+                    this.m_out.println(line + "<br/>");
+                }
+            }
+
+            if (hasThrowable) {
+                boolean wantsMinimalOutput = ans.getStatus() == 1;
+                if (hasReporterOutput) {
+                    this.m_out.println("<h3>" + (wantsMinimalOutput ? "Expected Exception" : "Failure") + "</h3>");
+                }
+
+                this.generateExceptionReport(exception, method);
+            }
+
+            if (hasParameters) {
+                this.m_out.println("</td></tr>");
+            } else {
+                this.m_out.println("</div>");
+            }
+        }
+
+        if (hasParameters && rq == resultSetSize) {
+            this.m_out.println("</table>");
+        }
+
+    }
+
+    protected void generateExceptionReport(Throwable exception, ITestNGMethod method) {
+        this.generateExceptionReport(exception, method, exception.getLocalizedMessage());
+    }
+
+    private void generateExceptionReport(Throwable exception, ITestNGMethod method, String title) {
+        this.m_out.println("<p>" + Utils.escapeHtml(title) + "</p>");
+        StackTraceElement[] s1 = exception.getStackTrace();
+        Throwable t2 = exception.getCause();
+        if (t2 == exception) {
+            t2 = null;
+        }
+
+        int maxlines = Math.min(100, StackTraceTools.getTestRoot(s1, method));
+
+        for(int x = 0; x <= maxlines; ++x) {
+            this.m_out.println((x > 0 ? "<br/>at " : "") + Utils.escapeHtml(s1[x].toString()));
+        }
+
+        if (maxlines < s1.length) {
+            this.m_out.println("<br/>" + (s1.length - maxlines) + " lines not shown");
+        }
+
+        if (t2 != null) {
+            this.generateExceptionReport(t2, method, "Caused by " + t2.getLocalizedMessage());
+        }
+
+    }
+
+    private Collection<ITestNGMethod> getMethodSet(IResultMap tests) {
+        List<ITestNGMethod> r = new ArrayList(tests.getAllMethods());
+        Arrays.sort(r.toArray(new ITestNGMethod[r.size()]), new CustomReport.TestSorter());
+        return r;
+    }
+
+    public void generateSuiteSummaryReport(List<ISuite> suites) {
+        this.tableStart("param");
+        this.m_out.print("<tr><th>Test</th>");
+        this.tableColumnStart("Methods<br/>Passed");
+        this.tableColumnStart("Scenarios<br/>Passed");
+        this.tableColumnStart("# skipped");
+        this.tableColumnStart("# failed");
+        this.tableColumnStart("Total<br/>Time");
+        this.tableColumnStart("Included<br/>Groups");
+        this.tableColumnStart("Excluded<br/>Groups");
+        this.m_out.println("</tr>");
+        NumberFormat formatter = new DecimalFormat("#,##0.0");
+        int qty_tests = 0;
+        int qty_pass_m = 0;
+        int qty_pass_s = 0;
+        int qty_skip = 0;
+        int qty_fail = 0;
+        long time_start = 9223372036854775807L;
+        long time_end = -9223372036854775808L;
+        Iterator i$ = suites.iterator();
+
+        while(i$.hasNext()) {
+            ISuite suite = (ISuite)i$.next();
+            if (suites.size() > 1) {
+                this.titleRow(suite.getName(), 7);
+            }
+
+            Map<String, ISuiteResult> tests = suite.getResults();
+            i$ = tests.values().iterator();
+
+            while(i$.hasNext()) {
+                ISuiteResult r = (ISuiteResult)i$.next();
+                ++qty_tests;
+                ITestContext overview = r.getTestContext();
+                this.startSummaryRow(overview.getName());
+                int q = this.getMethodSet(overview.getPassedTests()).size();
+                qty_pass_m += q;
+                this.summaryCell(q, 2147483647);
+                q = overview.getPassedTests().size();
+                qty_pass_s += q;
+                this.summaryCell(q, 2147483647);
+                q = this.getMethodSet(overview.getSkippedTests()).size();
+                qty_skip += q;
+                this.summaryCell(q, 0);
+                q = this.getMethodSet(overview.getFailedTests()).size();
+                qty_fail += q;
+                this.summaryCell(q, 0);
+                time_start = Math.min(overview.getStartDate().getTime(), time_start);
+                time_end = Math.max(overview.getEndDate().getTime(), time_end);
+                this.summaryCell(formatter.format((double)(overview.getEndDate().getTime() - overview.getStartDate().getTime()) / 1000.0D) + " seconds", true);
+                this.summaryCell(overview.getIncludedGroups());
+                this.summaryCell(overview.getExcludedGroups());
+                this.m_out.println("</tr>");
+            }
+        }
+
+        if (qty_tests > 1) {
+            this.m_out.println("<tr class=\"total\"><td>Total</td>");
+            this.summaryCell(qty_pass_m, 2147483647);
+            this.summaryCell(qty_pass_s, 2147483647);
+            this.summaryCell(qty_skip, 0);
+            this.summaryCell(qty_fail, 0);
+            this.summaryCell(formatter.format((double)(time_end - time_start) / 1000.0D) + " seconds", true);
+            this.m_out.println("<td colspan=\"2\">&nbsp;</td></tr>");
+        }
+
+        this.m_out.println("</table>");
+    }
+
+    private void summaryCell(String[] val) {
+        StringBuffer b = new StringBuffer();
+        String[] arr$ = val;
+        int len$ = val.length;
+
+        for(int i$ = 0; i$ < len$; ++i$) {
+            String v = arr$[i$];
+            b.append(v + " ");
+        }
+
+        this.summaryCell(b.toString(), true);
+    }
+
+    private void summaryCell(String v, boolean isgood) {
+        this.m_out.print("<td class=\"numi" + (isgood ? "" : "_attn") + "\">" + v + "</td>");
+    }
+
+    private void startSummaryRow(String label) {
+        ++this.m_row;
+        this.m_out.print("<tr" + (this.m_row % 2 == 0 ? " class=\"stripe\"" : "") + "><td style=\"text-align:left;padding-right:2em\">" + label + "</td>");
+    }
+
+    private void summaryCell(int v, int maxexpected) {
+        this.summaryCell(String.valueOf(v), v <= maxexpected);
+        this.m_rowTotal += v;
+    }
+
+    private void tableStart(String cssclass) {
+        this.m_out.println("<table cellspacing=0 cellpadding=0" + (cssclass != null ? " class=\"" + cssclass + "\"" : " style=\"padding-bottom:2em\"") + ">");
+        this.m_row = 0;
+    }
+
+    private void tableColumnStart(String label) {
+        this.m_out.print("<th class=\"numi\">" + label + "</th>");
+    }
+
+    private void titleRow(String label, int cq) {
+        this.m_out.println("<tr><th colspan=\"" + cq + "\">" + label + "</th></tr>");
+        this.m_row = 0;
+    }
+
+    protected void writeStyle(String[] formats, String[] targets) {
+    }
+
+    protected void startHtml(PrintWriter out) {
+        out.println("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.1//EN http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd\">");
+        out.println("<html xmlns=\"http://www.w3.org/1999/xhtml\">");
+        out.println("<head>");
+        out.println("<title>TestNG:  Unit Test</title>");
+        out.println("<style type=\"text/css\">");
+        out.println("table caption,table.info_table,table.param,table.passed,table.failed {margin-bottom:10px;border:1px solid #000099;border-collapse:collapse;empty-cells:show;}");
+        out.println("table.info_table td,table.info_table th,table.param td,table.param th,table.passed td,table.passed th,table.failed td,table.failed th {");
+        out.println("border:1px solid #000099;padding:.25em .5em .25em .5em");
+        out.println("}");
+        out.println("table.param th {vertical-align:bottom}");
+        out.println("td.numi,th.numi,td.numi_attn {");
+        out.println("text-align:right");
+        out.println("}");
+        out.println("tr.total td {font-weight:bold}");
+        out.println("table caption {");
+        out.println("text-align:center;font-weight:bold;");
+        out.println("}");
+        out.println("table.passed tr.stripe td,table tr.passedodd td {background-color: #00AA00;}");
+        out.println("table.passed td,table tr.passedeven td {background-color: #33FF33;}");
+        out.println("table.passed tr.stripe td,table tr.skippedodd td {background-color: #cccccc;}");
+        out.println("table.passed td,table tr.skippedodd td {background-color: #dddddd;}");
+        out.println("table.failed tr.stripe td,table tr.failedodd td,table.param td.numi_attn {background-color: #FF3333;}");
+        out.println("table.failed td,table tr.failedeven td,table.param tr.stripe td.numi_attn {background-color: #DD0000;}");
+        out.println("tr.stripe td,tr.stripe th {background-color: #E6EBF9;}");
+        out.println("p.totop {font-size:85%;text-align:center;border-bottom:2px black solid}");
+        out.println("div.shootout {padding:2em;border:3px #4854A8 solid}");
+        out.println("</style>");
+        out.println("</head>");
+        out.println("<body>");
+    }
+
+    protected void endHtml(PrintWriter out) {
+        out.println("</body></html>");
+    }
+
+    private class TestSorter implements Comparator<ITestNGMethod> {
+        private TestSorter() {
+        }
+
+        public int compare(ITestNGMethod o1, ITestNGMethod o2) {
+            return (int)(o1.getDate() - o2.getDate());
+        }
     }
 
     private static final Comparator<ITestResult> NAME_COMPARATOR = new CustomReport.NameComparator();
@@ -69,7 +551,6 @@ public class CustomReport  extends TestListenerAdapter implements IReporter {
                 sb.append("<br>").append("Test class: " + testClass);
                 String testName = tr.getTestName();
                 if (testName != null) {
-                    //newly changed
 //                    sb.append(" (").append(testName).append(")");
                 }
             }
@@ -98,7 +579,6 @@ public class CustomReport  extends TestListenerAdapter implements IReporter {
                 fullStackTrace = "Output-" + tr.hashCode();
                 sb.append("\n<a href=\"#").append(fullStackTrace).append("\"").append(" onClick='toggleBox(\"").append(fullStackTrace).append("\", this, \"Show output\", \"Hide output\");'>").append("Show output</a>\n").append("\n<a href=\"#").append(fullStackTrace).append("\"").append(" onClick=\"toggleAllBoxes();\">Show all outputs</a>\n");
                 sb.append("<div class='log' id=\"").append(fullStackTrace).append("\">\n");
-                //newly changed
                 i$ = output.iterator();
 
                 while(i$.hasNext()) {
@@ -187,7 +667,7 @@ public class CustomReport  extends TestListenerAdapter implements IReporter {
         sb.append("</body>\n</html>");
         Utils.writeFile(outputDirectory, getOutputFile(testContext), sb.toString());
     }
-    //newly changed
+
     private static void ppp(String s) {
         System.out.println("[CustomReport] " + s);
     }
