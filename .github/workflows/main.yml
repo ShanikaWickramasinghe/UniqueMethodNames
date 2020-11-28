@@ -11,3 +11,10 @@ jobs:
       - uses: actions/setup-node@v1
       - run: npm install -g bats
       - run: bats -v
+      - uses: actions/checkout@master
+      - name: Archive Release
+        uses: thedoctor0/zip-release@master
+        with:
+         filename: 'release.zip'
+         exclusions: '*.git* /*node_modules/* .editorconfig'
+
