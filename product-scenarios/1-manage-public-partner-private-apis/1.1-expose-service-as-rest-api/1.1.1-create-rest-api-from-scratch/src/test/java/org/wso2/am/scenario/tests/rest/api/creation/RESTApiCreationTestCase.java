@@ -43,7 +43,7 @@ import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 import java.rmi.RemoteException;
 import java.util.Properties;
 
-//newly added imports are as follow
+//newly added imports are as follow found
 import org.testng.ITest;
 import org.testng.annotations.BeforeMethod;
 import java.lang.reflect.Method;
